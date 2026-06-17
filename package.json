@@ -1,0 +1,9 @@
+{
+  "name": "hmd-netlify-mailer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HMD Architects mailer as a Netlify Function (Gmail SMTP via app password). Same /send contract as the standalone mailer-service.",
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  }
+}
