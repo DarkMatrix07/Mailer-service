@@ -1,9 +1,9 @@
 const nodemailer = require('nodemailer');
 
 /**
- * HMD mailer — Netlify Function.
+ * HMD mailer — Vercel Serverless Function.
  *
- * Sends email via SMTP (Gmail with an app password by default). Netlify runs
+ * Sends email via SMTP (Gmail with an app password by default). Vercel runs
  * functions on AWS Lambda, which (unlike DigitalOcean droplets) does NOT block
  * outbound SMTP ports — so Gmail SMTP works here, and because Google signs the
  * message (SPF/DKIM/DMARC aligned) it lands in the inbox, not spam.
@@ -14,25 +14,27 @@ const nodemailer = require('nodemailer');
  *   body: { to[], cc[], bcc[], replyTo[], subject, html, text,
  *           fromAddress, fromName, attachments:[{filename, content(base64), contentType}] }
  */
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return json(405, { error: 'Method not allowed' });
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   // Auth — shared secret must match the caller (Laravel MAILER_SERVICE_SECRET).
   const secret = process.env.API_SECRET || '';
-  const provided =
-    event.headers['x-api-secret'] || event.headers['X-Api-Secret'] || '';
+  const provided = req.headers['x-api-secret'] || '';
   if (!secret || provided !== secret) {
-    return json(401, { error: 'unauthorized' });
+    return res.status(401).json({ error: 'unauthorized' });
   }
 
-  let body;
-  try {
-    body = JSON.parse(event.body || '{}');
-  } catch {
-    return json(400, { error: 'invalid JSON body' });
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body || '{}');
+    } catch {
+      return res.status(400).json({ error: 'invalid JSON body' });
+    }
   }
+  body = body || {};
 
   const {
     to,
@@ -49,13 +51,13 @@ exports.handler = async (event) => {
 
   const toList = [].concat(to || []).filter(Boolean);
   if (toList.length === 0) {
-    return json(422, { error: 'At least one recipient (to) is required' });
+    return res.status(422).json({ error: 'At least one recipient (to) is required' });
   }
   if (!subject || (!html && !text)) {
-    return json(422, { error: 'subject and (html or text) are required' });
+    return res.status(422).json({ error: 'subject and (html or text) are required' });
   }
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    return json(500, { error: 'SMTP is not configured (set SMTP_HOST/SMTP_USER/SMTP_PASS)' });
+    return res.status(500).json({ error: 'SMTP is not configured (set SMTP_HOST/SMTP_USER/SMTP_PASS)' });
   }
 
   const port = Number(process.env.SMTP_PORT || 587);
@@ -94,17 +96,9 @@ exports.handler = async (event) => {
       attachments: mailAttachments,
     });
 
-    return json(200, { ok: true, messageId: info.messageId });
+    return res.status(200).json({ ok: true, messageId: info.messageId });
   } catch (err) {
     console.error('[hmd-mailer] send failed:', err);
-    return json(500, { error: String((err && err.message) || err) });
+    return res.status(500).json({ error: String((err && err.message) || err) });
   }
 };
-
-function json(statusCode, payload) {
-  return {
-    statusCode,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    body: JSON.stringify(payload),
-  };
-}
