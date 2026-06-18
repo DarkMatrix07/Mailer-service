@@ -60,17 +60,18 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'SMTP is not configured (set SMTP_HOST/SMTP_USER/SMTP_PASS)' });
   }
 
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure =
-    typeof process.env.SMTP_SECURE === 'string'
-      ? process.env.SMTP_SECURE === 'true'
-      : port === 465;
+  // Trim env values — a stray space/tab pasted into the dashboard would
+  // otherwise break DNS ("EBADNAME") or auth. Gmail app passwords are
+  // whitespace-free, so strip all whitespace from the password too.
+  const env = (k) => (process.env[k] || '').trim();
+  const port = Number(env('SMTP_PORT') || 587);
+  const secure = process.env.SMTP_SECURE ? env('SMTP_SECURE') === 'true' : port === 465;
 
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+    host: env('SMTP_HOST'),
     port,
     secure, // true for 465 (implicit TLS), false for 587 (STARTTLS)
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    auth: { user: env('SMTP_USER'), pass: (process.env.SMTP_PASS || '').replace(/\s/g, '') },
   });
 
   const from = fromAddress
